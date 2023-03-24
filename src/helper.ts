@@ -1,10 +1,9 @@
-import { type UnsignedTransaction, type BigNumberish, BigNumber, type Transaction, type BytesLike } from 'ethers'
+import { type UnsignedTransaction, type BigNumberish, BigNumber, type Transaction, type BytesLike, utils } from 'ethers'
 import fetch from 'node-fetch'
 
 import { type Epoch } from './types'
-import { type PromiseOrValue } from './generated/common'
 
-const tenE18 = BigNumber.from(10).pow(18)
+const twoE16 = BigNumber.from(2).pow(16)
 const tenE36 = BigNumber.from(10).pow(36)
 
 export async function fetchData (requestData: any): Promise<any> {
@@ -109,17 +108,17 @@ export const normalizeTicketData = (epoch: Epoch): Epoch => {
   const total = epoch._tickets.reduce((total, current) => total.add(current), BigNumber.from(0))
 
   // multiplely the scale by large number and divide at end to reduce the precision loss
-  const scale = tenE18.mul(tenE36).div(total)
+  const scale = twoE16.mul(tenE36).div(total)
 
   const tickets: BigNumber[] = epoch._tickets.map((a) => scale.mul(a)).map((a) => a.div(tenE36))
   const sum = tickets.reduce((prev, current) => prev.add(current), BigNumber.from(0))
-  const diff = tenE18.sub(sum)
+  const diff = twoE16.sub(sum)
 
   tickets[0] = tickets[0].add(diff)
 
   const updatedSum = tickets.reduce((prev, current) => prev.add(current), BigNumber.from(0))
 
-  if (!updatedSum.eq(tenE18)) {
+  if (!updatedSum.eq(twoE16)) {
     throw new Error('Failed ticker normalisation')
   }
 
@@ -129,20 +128,81 @@ export const normalizeTicketData = (epoch: Epoch): Epoch => {
   }
 }
 
-export const generateTicketBytesForEpoch = (
-  _networkId: PromiseOrValue<BytesLike>,
-  _epoch: PromiseOrValue<BigNumberish>,
-  _tickets: Array<PromiseOrValue<BigNumberish>>
-): BytesLike => {
-  // TODO: create bytes from the input arguments
-  return '0x1234'
+const trimIfClusterMoreThanRequired = (ticketData: Epoch[], requiredClusters: number): Epoch[] => {
+  return ticketData.map((a) => {
+    return {
+      ...a,
+      _clusters: a._clusters.slice(0, requiredClusters),
+      _tickets: a._tickets.slice(0, requiredClusters)
+    }
+  })
 }
 
-export const generateTicketBytesForEpochs = (
-  _networkId: PromiseOrValue<BytesLike>,
-  _epoch: Array<PromiseOrValue<BigNumberish>>,
-  _tickets: Array<Array<PromiseOrValue<BigNumberish>>>
-): BytesLike => {
-  // TODO: create bytes from the input arguments
-  return '0x1234'
+// assumes that the ticket data is already sorted in asc order of epochs
+export const sortAndselectOnlyConsecutiveEpoch = (ticketData: Epoch[]): Epoch[] => {
+  if (ticketData.length <= 1) {
+    return ticketData
+  }
+  ticketData = ticketData.sort((a, b) => BigNumber.from(a._epoch).sub(BigNumber.from(b._epoch)).toNumber()) // sort the ticket data in ascending order of epochs
+
+  const startEpoch = ticketData[0]
+
+  const toReturn: Epoch[] = []
+  toReturn.push(startEpoch)
+
+  for (let index = 1; index < ticketData.length; index++) {
+    const element = ticketData[index]
+    const currentEpoch = element._epoch
+    const lastEpoch = toReturn[toReturn.length - 1]._epoch
+
+    if (BigNumber.from(lastEpoch).add(1).eq(BigNumber.from(currentEpoch))) {
+      toReturn.push(element)
+    } else {
+      break
+    }
+  }
+
+  return toReturn
+}
+
+export const generateTicketBytesForEpochs = (ticketData: Epoch[], maxClustersToSelect: number): BytesLike => {
+  ticketData = trimIfClusterMoreThanRequired(ticketData, maxClustersToSelect)
+
+  // Ticket Structure
+  // |--NetworkId(256 bits)--|--FromEpoch(32 bits)--|--N*Ticket(16 bits)--|
+  let toBytes: string = ''
+  const networkId = ticketData[0]._networkId
+  const startEpoch = BigNumber.from(ticketData[0]._epoch).toHexString()
+
+  toBytes = toBytes + networkId + utils.hexZeroPad(startEpoch, 4).split('x')[1]
+
+  for (let index = 0; index < ticketData.length; index++) {
+    const element = ticketData[index]
+    if (element._tickets.length === 0) {
+      continue
+    } else if (element._tickets.length < maxClustersToSelect - 1) {
+      // todo
+      const tickets = element._tickets
+        .splice(0, maxClustersToSelect - 1)
+        .map((a) => BigNumber.from(a).toHexString())
+        .map((a) => utils.hexZeroPad(a, 2).split('x')[1])
+        .reduce((prev, current) => prev + current, '')
+      toBytes = toBytes + tickets
+
+      const zeroPad = utils.hexZeroPad('0x0', 2).split('x')[1]
+      const timesToPadZero = maxClustersToSelect - 1 - element._tickets.length
+
+      for (let index = 0; index < timesToPadZero; index++) {
+        toBytes = toBytes + zeroPad
+      }
+    } else {
+      const tickets = element._tickets
+        .splice(0, maxClustersToSelect - 1)
+        .map((a) => BigNumber.from(a).toHexString())
+        .map((a) => utils.hexZeroPad(a, 2).split('x')[1])
+        .reduce((prev, current) => prev + current, '')
+      toBytes = toBytes + tickets
+    }
+  }
+  return toBytes
 }

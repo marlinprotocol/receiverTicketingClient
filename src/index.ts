@@ -3,7 +3,13 @@ import { type Overrides, type Signer, utils, BigNumber } from 'ethers'
 import { Subgraph } from './subgraph'
 import { ContractCache } from './contractCache'
 import { DB } from './db'
-import { filterTicketData, getUnsignedTransactionFromSignedTransaction, induceDelay, normalizeTicketData } from './helper'
+import {
+  filterTicketData,
+  getUnsignedTransactionFromSignedTransaction,
+  induceDelay,
+  normalizeTicketData,
+  sortAndselectOnlyConsecutiveEpoch
+} from './helper'
 import { createUnsignedTransaction } from './transactions'
 import { type Epoch, type TicketConfig, type DataConfig, type SelectedClusterData } from './types'
 import * as dotenv from 'dotenv'
@@ -13,6 +19,7 @@ const MAX_GAS_LIMIT = BigNumber.from(process.env.MAX_GAS_LIMIT || '1000000')
 const GAS_PRICE_INCREMENT = BigNumber.from(process.env.GAS_PRICE_INCREMENT || '110')
 const MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT = BigNumber.from(process.env.MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT || 96).toNumber()
 const TRANSACTION_WAIT_TIME = BigNumber.from(process.env.TRANSACTION_WAIT_TIME || '600000').toNumber()
+const MAX_CLUSTERS_TO_SELECT = BigNumber.from(process.env.MAX_CLUSTERS_TO_SELECT || '5').toNumber()
 
 export class Ticketing {
   private readonly dataConfig: DataConfig
@@ -167,16 +174,17 @@ export class Ticketing {
 
     // select epochs that have atleast one cluster present, then normalize the data
     ticketData = ticketData.filter((a) => a._clusters.length > 0).map((a) => normalizeTicketData(a))
-    console.log({ ticketData, networkId, _epochs })
+    ticketData = sortAndselectOnlyConsecutiveEpoch(ticketData)
 
-    // if no epoch is there, then error with be thrown
+    console.log(JSON.stringify({ ticketData, networkId, _epochs }, null, 4))
+
+    // if no epoch is there, then we job will be paused for some time
     if (ticketData.length > 0) {
       const transaction = await createUnsignedTransaction.submitTicketForEpochs(
         this.signer,
         this.ticketConfig.contractAddresses.ClusterRewards,
-        ticketData[0]._networkId,
-        ticketData.map((a) => a._epoch),
-        ticketData.map((a) => a._tickets),
+        ticketData,
+        MAX_CLUSTERS_TO_SELECT,
         { ...options, gasPrice, gasLimit }
       )
 
