@@ -5,6 +5,7 @@ import { type Operation, type ClusterQueryData, type Epoch, type EpochData } fro
 export class DB {
   private ticketClient: PoolClient
   private receiverClient: PoolClient
+  private receiver: string
   private readonly ticketPool: Pool
   private readonly receiverPool: Pool
   private readonly epochData: EpochData
@@ -15,7 +16,7 @@ export class DB {
     this.epochData = epochData
   }
 
-  public async init (): Promise<void> {
+  public async init (receiverAddress: string): Promise<void> {
     if (!this.ticketClient) {
       this.ticketClient = await this.ticketPool.connect()
     }
@@ -23,6 +24,8 @@ export class DB {
     if (!this.receiverClient) {
       this.receiverClient = await this.receiverPool.connect()
     }
+
+    this.receiver = receiverAddress;
   }
 
   public async fetchTicketsForEpoch (_networkId: string, _epoch: string, epochEndTime: number): Promise<Epoch> {
@@ -69,15 +72,15 @@ export class DB {
 
   public async savePendingTransaction (operation: number, epoch: number, rawTx: string): Promise<void> {
     const tx = utils.parseTransaction(rawTx)
-    await this.receiverClient.query(getInsertString(operation, epoch, tx.hash, rawTx))
+    await this.receiverClient.query(getInsertString(operation, epoch, tx.hash, rawTx, this.receiver))
   }
 
   public async deleteOperation (operation: number): Promise<void> {
-    await this.receiverClient.query(deleteOperation(operation))
+    await this.receiverClient.query(deleteOperation(operation, this.receiver))
   }
 
   public async deleteEpoch (epoch: number): Promise<void> {
-    await this.receiverClient.query(deleteEpoch(epoch))
+    await this.receiverClient.query(deleteEpoch(epoch, this.receiver))
   }
 
   public async getPendingTransaction (): Promise<string | null> {
@@ -91,19 +94,19 @@ export class DB {
   }
 
   public async createRequiredTables (): Promise<void> {
-    const combinedTable = createCombinedTable()
+    const combinedTable = createCombinedTable(this.receiver)
     await this.receiverClient.query(combinedTable)
   }
 
   public async getLastOperationData (): Promise<Operation[]> {
     const lastOperationNumber = await this.getLastOperationNumber()
-    const result = await this.receiverClient.query(getLastOperationData(lastOperationNumber))
+    const result = await this.receiverClient.query(getLastOperationData(lastOperationNumber, this.receiver))
 
     return result.rows as Operation[]
   }
 
   public async getLastOperationNumber (): Promise<number> {
-    const result = await this.receiverClient.query(getLastOperationNumberScript())
+    const result = await this.receiverClient.query(getLastOperationNumberScript(this.receiver))
     if (result.rows.length === 0) {
       return 0
     } else {
@@ -135,8 +138,8 @@ const getReceiptQueryString = (timestamp: number, epochData: EpochData): string 
     `
 }
 
-const createCombinedTable = (): string => {
-  return `CREATE TABLE IF NOT EXISTS public.operations
+const createCombinedTable = (receiver: string): string => {
+  return `CREATE TABLE IF NOT EXISTS public.operations_${receiver}
   (
       operation integer NOT NULL,
       epoch integer NOT NULL,
@@ -144,29 +147,29 @@ const createCombinedTable = (): string => {
       data character varying NOT NULL
   );
   
-  ALTER TABLE IF EXISTS public.operations
+  ALTER TABLE IF EXISTS public.operations_${receiver}
       OWNER to postgres;`
 }
 
-const getLastOperationData = (operation: number): string => {
-  return `SELECT operation, epoch, hash, data FROM public.operations where operation=${operation} order by epoch desc;`
+const getLastOperationData = (operation: number, receiver: string): string => {
+  return `SELECT operation, epoch, hash, data FROM public.operations_${receiver} where operation=${operation} order by epoch desc;`
 }
 
-const getLastOperationNumberScript = (): string => {
-  return 'SELECT operation, epoch, hash, data FROM public.operations order by operation desc limit 1;'
+const getLastOperationNumberScript = (receiver: string): string => {
+  return `SELECT operation, epoch, hash, data FROM public.operations_${receiver} order by operation desc limit 1;`
 }
 
-const deleteOperation = (operation: number): string => {
-  return `DELETE FROM public.operations WHERE operation = ${operation};`
+const deleteOperation = (operation: number, receiver: string): string => {
+  return `DELETE FROM public.operations_${receiver} WHERE operation = ${operation};`
 }
 
-const deleteEpoch = (epoch: number): string => {
-  return `DELETE FROM public.operations WHERE epoch = ${epoch};`
+const deleteEpoch = (epoch: number, receiver: string): string => {
+  return `DELETE FROM public.operations_${receiver} WHERE epoch = ${epoch};`
 }
 
-const getInsertString = (operation: number, epoch: number, hash: string, rawTx: string): string => {
+const getInsertString = (operation: number, epoch: number, hash: string, rawTx: string, receiver: string): string => {
   hash = hash.toLowerCase()
-  return `INSERT INTO public.operations(
+  return `INSERT INTO public.operations_${receiver}(
     operation, epoch, hash, data)
     VALUES (${operation}, ${epoch}, '${hash}', '${rawTx}');`
 }

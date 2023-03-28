@@ -12,6 +12,9 @@ import { type AllClusterSelectors, type ClusterSelector, type SelectedClustersLi
 export class ContractCache {
   public START_TIME: number
   public EPOCH_LENGTH: number
+  public receiver: string
+
+  private initialized: string
 
   private readonly signer: Signer
   private readonly receiverStaking: ReceiverStaking
@@ -31,16 +34,18 @@ export class ContractCache {
     }
   }
 
-  public async getEpochTime (epochNumber: BigNumberish): Promise<[number, number]> {
-    if (!this.START_TIME) {
-      // TODO Try to fetch the following data from subgraph
-      this.START_TIME = (await this.receiverStaking.callStatic.START_TIME()).toNumber()
-    }
+  public async init (): Promise<void> {
+    this.receiver = await this.receiverStaking.signerToStaker(this.signer.getAddress())
+    this.START_TIME = (await this.receiverStaking.callStatic.START_TIME()).toNumber()
+    this.EPOCH_LENGTH = (await this.receiverStaking.callStatic.EPOCH_LENGTH()).toNumber()
+  }
 
-    if (!this.EPOCH_LENGTH) {
-      // TODO Try to fetch the following data from subgraph
-      this.EPOCH_LENGTH = (await this.receiverStaking.callStatic.EPOCH_LENGTH()).toNumber()
-    }
+  public if_init (): void {
+    if (!this.initialized) throw new Error('Not initialized, call object.init(), before using')
+  }
+
+  public async getEpochTime (epochNumber: BigNumberish): Promise<[number, number]> {
+    this.if_init()    
 
     const epochStartTime = BigNumber.from(epochNumber).mul(this.EPOCH_LENGTH).add(this.START_TIME).toNumber()
     const epochEndTime = BigNumber.from(epochNumber).add(1).mul(this.EPOCH_LENGTH).add(this.START_TIME).toNumber()
@@ -87,9 +92,10 @@ export class ContractCache {
   }
 
   public async checkIfTicketIsIssued (epoch: string): Promise<boolean> {
-    const signerAddress = await this.signer.getAddress()
+    this.if_init();
+    
     try {
-      return await this.clusterRewards.callStatic.isTicketsIssued(signerAddress, epoch)
+      return await this.clusterRewards.callStatic.isTicketsIssued(this.receiver, epoch)
     } catch (ex) {
       return false
     }
