@@ -70,6 +70,13 @@ export class DB {
     return epochs
   }
 
+  public async getTimeOfFirstTicket(): Promise<number> {
+    const result = await this.ticketClient.query(findTimeOfFirstTicketsQuery());
+    const firstTime = result.rows[0];
+    if(!firstTime) return 0;
+    return 
+  } 
+
   public async savePendingTransaction (operation: number, epoch: number, rawTx: string): Promise<void> {
     const tx = utils.parseTransaction(rawTx)
     await this.receiverClient.query(getInsertString(operation, epoch, tx.hash, rawTx, this.receiver))
@@ -113,29 +120,39 @@ export class DB {
       return parseInt(result.rows[0].operation)
     }
   }
+
+  public async updateLatestEpoch (lastSubmittedEpoch: number): Promise<void> {
+    await this.receiverClient.query(updateLastSubmitted(lastSubmittedEpoch, this.receiver))
+  }
+
+  public async getLastProcessedEpoch (): Promise<number> {
+    const lastSubmittedRow = await this.receiverClient.query(getLastSubmittedQuery(this.receiver))
+    return lastSubmittedRow.rows[0].lastEpoch;
+  }
 }
 
 const getReceiptQueryString = (timestamp: number, epochData: EpochData): string => {
   timestamp = Math.floor(timestamp)
   return `
     SELECT rank_filter.cluster, COUNT(*) FROM (
-        SELECT msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster, min(msg_sends.ts) as send_min,
+        SELECT msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster, min(msg_recvs.ts) as send_min,
         rank() OVER (
             PARTITION BY (msg_recvs.host, msg_recvs.message_id)
             ORDER BY min(msg_recvs.ts) ASC, min(msg_recvs."offset") ASC
         )
-        FROM msg_recvs INNER JOIN msg_sends 
-        ON msg_recvs.message_id = msg_sends.message_id 
-        AND msg_recvs.cluster = msg_sends.cluster 
-        AND msg_sends.ts > msg_recvs.ts - interval '1 minute'
-        AND msg_sends.ts < msg_recvs.ts
-        WHERE msg_sends.ts > (to_timestamp(${timestamp})) - interval '${epochData.epochLengthInSeconds} seconds' - interval '1 minutes'
-        AND msg_sends.ts < (to_timestamp(${timestamp}))
+        FROM msg_recvs
         AND msg_recvs.ts > (to_timestamp(${timestamp})) - interval '${epochData.epochLengthInSeconds} seconds'
         AND msg_recvs.ts < (to_timestamp(${timestamp}))
         GROUP BY (msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster)
     ) rank_filter WHERE RANK < 4 AND send_min > (to_timestamp(${timestamp})) - interval '${epochData.epochLengthInSeconds} seconds' AND send_min < (to_timestamp(${timestamp}))  GROUP BY rank_filter.cluster;
     `
+}
+
+
+const findTimeOfFirstTicketsQuery = (): string => {
+  return `
+    SELECT min(msg_recvs.ts) from msg_recvs
+  `
 }
 
 const createCombinedTable = (receiver: string): string => {
@@ -148,6 +165,16 @@ const createCombinedTable = (receiver: string): string => {
   );
   
   ALTER TABLE IF EXISTS public.operations_${receiver}
+      OWNER to postgres;
+  
+  CREATE TABLE IF NOT EXISTS public.lastSubmitted_${receiver}
+  (
+      index integer NOT NULL,
+      lastEpoch integer NOT NULL
+      PRIMARY KEY (index)
+  );
+  
+  ALTER TABLE IF EXISTS public.lastSubmitted_${receiver}
       OWNER to postgres;`
 }
 
@@ -165,6 +192,20 @@ const deleteOperation = (operation: number, receiver: string): string => {
 
 const deleteEpoch = (epoch: number, receiver: string): string => {
   return `DELETE FROM public.operations_${receiver} WHERE epoch = ${epoch};`
+}
+
+const updateLastSubmitted = (latestEpoch: number, receiver: string): string => {
+  return `INSERT INTO public.lastSubmitted_${receiver} (index, lastEpoch) 
+  VALUES (0, ${latestEpoch}) 
+  ON CONFLICT (index)
+  DO
+    UPDATE SET lastEpoch = ${latestEpoch}`;
+}
+
+const getLastSubmittedQuery = (receiver: string): string => {
+  return `
+    SELECT lastEpoch FROM public.lastSubmitted_${receiver} where index=0;
+  `;
 }
 
 const getInsertString = (operation: number, epoch: number, hash: string, rawTx: string, receiver: string): string => {

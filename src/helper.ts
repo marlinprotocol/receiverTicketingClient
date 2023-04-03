@@ -27,7 +27,7 @@ function filterClusterAndTickets (
     const selectedClusterIndex = allClusters.indexOf(cluster)
 
     let selectedClusterTickets = '0'
-    if (index !== -1) {
+    if (selectedClusterIndex !== -1) {
       selectedClusterTickets = allTickets[selectedClusterIndex]
     }
 
@@ -58,7 +58,7 @@ export function filterTicketData (epochs: Epoch[], clustersToSelect: string[][])
   return toReturn
 }
 
-export function getUnsignedTransactionFromSignedTransaction (
+export function increaseGasForTx (
   tx: Transaction,
   gasPrice: BigNumberish,
   gasLimitMultiplier: BigNumberish

@@ -44,11 +44,15 @@ export class ContractCache {
     if (!this.initialized) throw new Error('Not initialized, call object.init(), before using')
   }
 
+  public getEpoch(time: number):  number {
+    return parseInt(((time - this.START_TIME)/(this.EPOCH_LENGTH)) +  "") + 1;
+  }
+
   public async getEpochTime (epochNumber: BigNumberish): Promise<[number, number]> {
     this.if_init()    
 
-    const epochStartTime = BigNumber.from(epochNumber).mul(this.EPOCH_LENGTH).add(this.START_TIME).toNumber()
-    const epochEndTime = BigNumber.from(epochNumber).add(1).mul(this.EPOCH_LENGTH).add(this.START_TIME).toNumber()
+    const epochStartTime = BigNumber.from(epochNumber).sub(1).mul(this.EPOCH_LENGTH).add(this.START_TIME).toNumber()
+    const epochEndTime = BigNumber.from(epochNumber).mul(this.EPOCH_LENGTH).add(this.START_TIME).toNumber()
 
     return [epochStartTime, epochEndTime]
   }
