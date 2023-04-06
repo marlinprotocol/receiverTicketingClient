@@ -160,7 +160,7 @@ export const generateTicketBytesForEpochs = (ticketData: Epoch[], maxClustersToS
       if(clusterTicketForEpoch >= (2**16)) throw new Error("Panic, ticket generation invalid");
       toBytes = toBytes+clusterTicketForEpoch.toString(16).padStart(4, '0');
     }
-    console.log(`${(new Date()).toJSON()} Ticket submission data generated is ${toBytes}`)
   }
+  console.log(`${(new Date()).toJSON()} Ticket submission data generated is ${toBytes}`)
   return toBytes
 }

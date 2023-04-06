@@ -74,6 +74,7 @@ export class DB {
   public async getTimeOfFirstTicketAfter(ts: number): Promise<number> {
     const result = await this.ticketClient.query(findTimeOfFirstTicketsAfterQuery(ts));
     const firstTime = result.rows[0];
+    console.log(firstTime)
     if(!firstTime || !firstTime.min) return 0;
     return Date.parse(result.rows[0].min)/1000
   } 
@@ -129,7 +130,7 @@ export class DB {
   public async getLastProcessedEpoch (): Promise<number> {
     const lastSubmittedRow = await this.receiverClient.query(getLastSubmittedQuery(this.receiver))
     if(lastSubmittedRow.rows.length == 0) return 0;
-    return lastSubmittedRow.rows[0].lastEpoch;
+    return lastSubmittedRow.rows[0].lastepoch;
   }
 }
 

@@ -164,6 +164,7 @@ export class Ticketing {
         console.log(`${(new Date()).toJSON()} Transaction pending for the signer account, wait for it to complete`);
         return TRANSACTION_WAIT_TIME;
       }
+      lastSubmittedEpoch = lastSubmittedEpochLocal
     }
 
     if(!lastSubmittedEpoch) {
