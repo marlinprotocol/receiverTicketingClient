@@ -89,17 +89,16 @@ export class Subgraph {
     }
   }
 
-  public async getLastSubmittedEpochForGivenAddress (address: string): Promise<any[]> {
+  public async getLastSubmittedEpochForGivenAddress (address: string): Promise<any> {
     address = address.toLowerCase()
     const allData = []
 
     const data = JSON.stringify({
       query: `{
-        selectedClusters(first: 1, orderBy: epoch, orderDirection:desc, where:{address: "${address}"}) {
-          id
-          address
+        ticketsIssueds(where:{
+          issuedBy: "${address}"
+        }, orderBy: epoch, orderDirection: desc, first: 1) {
           epoch
-          network { id }
         }
       }`
     })
@@ -115,8 +114,7 @@ export class Subgraph {
     if (result.errors) {
       throw new Error('Error while fetching data from subgraph')
     } else {
-      allData.push(...result.data.selectedClusters)
-      return allData
+      return result.data.ticketsIssueds
     }
   }
 

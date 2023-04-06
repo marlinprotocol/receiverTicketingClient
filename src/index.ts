@@ -151,7 +151,7 @@ export class Ticketing {
     console.log(`${(new Date()).toJSON()} All pending transactions processed`);
 
     let lastSubmittedEpochLocal = await this.lastSubmitedEpochAsPerLocalDb()
-    let lastSubmittedEpoch = (await this.getLastSubmittedEpochAsPerSubgraph(await this.signer.getAddress()))
+    let lastSubmittedEpoch = (await this.getLastSubmittedEpochAsPerSubgraph(this.contractCache.receiver))
 
     if(lastSubmittedEpochLocal) {
       if(lastSubmittedEpochLocal < lastSubmittedEpoch) {
