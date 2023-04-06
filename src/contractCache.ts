@@ -6,7 +6,7 @@ import { IClusterSelector__factory } from './generated/factory/IClusterSelector_
 import { ClusterRewards__factory } from './generated/factory/ClusterRewards__factory'
 import { type ClusterRewards } from './generated/ClusterRewards'
 
-import { BigNumber, type BigNumberish, type Signer } from 'ethers'
+import { BigNumber, type BigNumberish, type Signer, constants } from 'ethers'
 import { type AllClusterSelectors, type ClusterSelector, type SelectedClustersListPerNetwork } from './types'
 
 export class ContractCache {
@@ -14,7 +14,7 @@ export class ContractCache {
   public EPOCH_LENGTH: number
   public receiver: string
 
-  private initialized: string
+  private initialized: boolean
 
   private readonly signer: Signer
   private readonly receiverStaking: ReceiverStaking
@@ -36,8 +36,11 @@ export class ContractCache {
 
   public async init (): Promise<void> {
     this.receiver = await this.receiverStaking.signerToStaker(this.signer.getAddress())
+    // TODO: Add condition
+    // if(this.receiver == constants.AddressZero) throw new Error("Signer not registered");
     this.START_TIME = (await this.receiverStaking.callStatic.START_TIME()).toNumber()
     this.EPOCH_LENGTH = (await this.receiverStaking.callStatic.EPOCH_LENGTH()).toNumber()
+    this.initialized = true;
   }
 
   public if_init (): void {

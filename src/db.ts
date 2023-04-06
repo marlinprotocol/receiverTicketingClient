@@ -28,8 +28,8 @@ export class DB {
     this.receiver = receiverAddress;
   }
 
-  public async fetchTicketsForEpoch (_networkId: string, _epoch: string, epochEndTime: number): Promise<Epoch> {
-    const query = getReceiptQueryString(epochEndTime, this.epochData)
+  public async fetchTicketsForEpoch (_networkId: string, _epoch: string, epochEndTime: [number, number], selectedClusters: string[]): Promise<Epoch> {
+    const query = getReceiptQueryString(...epochEndTime, selectedClusters);
     const result = await this.ticketClient.query(query)
 
     if (result.rowCount !== result.rows.length) {
@@ -45,17 +45,18 @@ export class DB {
     }
   }
 
-  public async fetchTicketsForEpochs (_networkId: string, _epochs: string[], epochEndTimes: number[]): Promise<Epoch[]> {
-    if (_epochs.length !== epochEndTimes.length) {
+  public async fetchTicketsForEpochs (_networkId: string, _epochs: string[], epochBoundaries: [number, number][], selectedClusters: string[][]): Promise<Epoch[]> {
+    if (_epochs.length !== epochBoundaries.length && _epochs.length !== selectedClusters.length) {
       throw new Error('Arity mismatch')
     }
 
     const epochs: Epoch[] = []
 
-    for (let index = 0; index < epochEndTimes.length; index++) {
+    for (let index = 0; index < epochBoundaries.length; index++) {
       const _epoch = _epochs[index]
-      const epochEndTime = epochEndTimes[index]
-      const query = getReceiptQueryString(epochEndTime, this.epochData)
+      const epochStartTime = epochBoundaries[index][0]
+      const epochEndTime = epochBoundaries[index][1]
+      const query = getReceiptQueryString(epochStartTime, epochEndTime, selectedClusters[index])
       const result = await this.ticketClient.query(query)
       const clusterData = result.rows as ClusterQueryData[]
 
@@ -70,11 +71,11 @@ export class DB {
     return epochs
   }
 
-  public async getTimeOfFirstTicket(): Promise<number> {
-    const result = await this.ticketClient.query(findTimeOfFirstTicketsQuery());
+  public async getTimeOfFirstTicketAfter(ts: number): Promise<number> {
+    const result = await this.ticketClient.query(findTimeOfFirstTicketsAfterQuery(ts));
     const firstTime = result.rows[0];
-    if(!firstTime) return 0;
-    return 
+    if(!firstTime || !firstTime.min) return 0;
+    return Date.parse(result.rows[0].min)/1000
   } 
 
   public async savePendingTransaction (operation: number, epoch: number, rawTx: string): Promise<void> {
@@ -127,12 +128,16 @@ export class DB {
 
   public async getLastProcessedEpoch (): Promise<number> {
     const lastSubmittedRow = await this.receiverClient.query(getLastSubmittedQuery(this.receiver))
+    if(lastSubmittedRow.rows.length == 0) return 0;
     return lastSubmittedRow.rows[0].lastEpoch;
   }
 }
 
-const getReceiptQueryString = (timestamp: number, epochData: EpochData): string => {
-  timestamp = Math.floor(timestamp)
+const getReceiptQueryString = (startTime: number, endTime: number, selectedClusters: string[]): string => {
+  // TODO: remove this line
+  endTime += 1800;
+  selectedClusters = selectedClusters.map(e => e.toLowerCase());
+  const clusterList: string = "'"+[...selectedClusters, ...selectedClusters.map(e => utils.getAddress(e))].join("','")+"'"
   return `
     SELECT rank_filter.cluster, COUNT(*) FROM (
         SELECT msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster, min(msg_recvs.ts) as send_min,
@@ -141,17 +146,17 @@ const getReceiptQueryString = (timestamp: number, epochData: EpochData): string 
             ORDER BY min(msg_recvs.ts) ASC, min(msg_recvs."offset") ASC
         )
         FROM msg_recvs
-        AND msg_recvs.ts > (to_timestamp(${timestamp})) - interval '${epochData.epochLengthInSeconds} seconds'
-        AND msg_recvs.ts < (to_timestamp(${timestamp}))
+        WHERE msg_recvs.ts > (to_timestamp(${startTime}))
+        AND msg_recvs.ts < (to_timestamp(${endTime}))
+        AND msg_recvs.cluster in (${clusterList})
         GROUP BY (msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster)
-    ) rank_filter WHERE RANK < 4 AND send_min > (to_timestamp(${timestamp})) - interval '${epochData.epochLengthInSeconds} seconds' AND send_min < (to_timestamp(${timestamp}))  GROUP BY rank_filter.cluster;
+    ) rank_filter WHERE RANK < 4 AND send_min > (to_timestamp(${startTime})) AND send_min < (to_timestamp(${endTime}))  GROUP BY rank_filter.cluster;
     `
 }
 
-
-const findTimeOfFirstTicketsQuery = (): string => {
+const findTimeOfFirstTicketsAfterQuery = (ts: number): string => {
   return `
-    SELECT min(msg_recvs.ts) from msg_recvs
+    SELECT MIN(msg_recvs.ts) FROM msg_recvs WHERE msg_recvs.ts > (to_timestamp(${ts}))
   `
 }
 
@@ -170,7 +175,7 @@ const createCombinedTable = (receiver: string): string => {
   CREATE TABLE IF NOT EXISTS public.lastSubmitted_${receiver}
   (
       index integer NOT NULL,
-      lastEpoch integer NOT NULL
+      lastEpoch integer NOT NULL,
       PRIMARY KEY (index)
   );
   

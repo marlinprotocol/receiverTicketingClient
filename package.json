@@ -11,6 +11,7 @@
     "ts-node": "ts-node",
     "test": "ts-node example.ts",
     "start": "ts-node run.ts",
+    "testPopulate": "ts-node test/populateTickets.ts",
     "release": "npm run clean && npm run build && pkg ."
   },
   "bin": "dist/run.js",

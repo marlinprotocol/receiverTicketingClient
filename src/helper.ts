@@ -3,7 +3,7 @@ import fetch from 'node-fetch'
 
 import { type Epoch } from './types'
 
-const twoE16 = BigNumber.from(2).pow(16)
+const twoE16 = (BigNumber.from(2).pow(16)).sub(1)
 const tenE36 = BigNumber.from(10).pow(36)
 
 export async function fetchData (requestData: any): Promise<any> {
@@ -65,8 +65,6 @@ export function increaseGasForTx (
 ): UnsignedTransaction {
   const newGasPrice = BigNumber.from(gasPrice).mul(gasLimitMultiplier).div(100)
 
-  // console.log({ tx })
-
   const newTx = {
     nonce: tx.nonce,
     gasPrice: newGasPrice,
@@ -74,29 +72,8 @@ export function increaseGasForTx (
     to: tx.to,
     value: tx.value,
     data: tx.data
-    // chainId: tx.chainId,
-
-    // Typed-Transaction features
-    // type: tx.type
-
-    // EIP-2930; Type 1 & EIP-1559; Type 2
-    // accessList: tx.accessList,
-
-    // EIP-1559; Type 2
-    // maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
-    // maxFeePerGas: tx.maxFeePerGas
   }
 
-  // const newTx = { ...tx, gasLimit, maxFeePerGas: newGasPrice }
-
-  // delete newTx.v
-  // delete newTx.r
-  // delete newTx.s
-  // delete newTx.hash
-  // delete newTx.type
-  // delete newTx.chainId
-
-  // console.log({ newTx })
   return newTx
 }
 
@@ -108,7 +85,8 @@ export const normalizeTicketData = (epoch: Epoch): Epoch => {
   const total = epoch._tickets.reduce((total, current) => total.add(current), BigNumber.from(0))
 
   // multiplely the scale by large number and divide at end to reduce the precision loss
-  const scale = twoE16.mul(tenE36).div(total)
+  let scale = BigNumber.from(0);
+  if(!total.eq(0)) scale = twoE16.mul(tenE36).div(total)
 
   const tickets: BigNumber[] = epoch._tickets.map((a) => scale.mul(a)).map((a) => a.div(tenE36))
   const sum = tickets.reduce((prev, current) => prev.add(current), BigNumber.from(0))
@@ -170,39 +148,19 @@ export const generateTicketBytesForEpochs = (ticketData: Epoch[], maxClustersToS
 
   // Ticket Structure
   // |--NetworkId(256 bits)--|--FromEpoch(32 bits)--|--N*Ticket(16 bits)--|
-  let toBytes: string = ''
   const networkId = ticketData[0]._networkId
-  const startEpoch = BigNumber.from(ticketData[0]._epoch).toHexString()
+  const startEpoch = BigNumber.from(ticketData[0]._epoch).toNumber()
 
-  toBytes = toBytes + networkId + utils.hexZeroPad(startEpoch, 4).split('x')[1]
+  let toBytes = networkId + startEpoch.toString(16).padStart(8, '0')
 
-  for (let index = 0; index < ticketData.length; index++) {
-    const element = ticketData[index]
-    if (element._tickets.length === 0) {
-      continue
-    } else if (element._tickets.length < maxClustersToSelect - 1) {
-      // todo
-      const tickets = element._tickets
-        .splice(0, maxClustersToSelect - 1)
-        .map((a) => BigNumber.from(a).toHexString())
-        .map((a) => utils.hexZeroPad(a, 2).split('x')[1])
-        .reduce((prev, current) => prev + current, '')
-      toBytes = toBytes + tickets
-
-      const zeroPad = utils.hexZeroPad('0x0', 2).split('x')[1]
-      const timesToPadZero = maxClustersToSelect - 1 - element._tickets.length
-
-      for (let index = 0; index < timesToPadZero; index++) {
-        toBytes = toBytes + zeroPad
-      }
-    } else {
-      const tickets = element._tickets
-        .splice(0, maxClustersToSelect - 1)
-        .map((a) => BigNumber.from(a).toHexString())
-        .map((a) => utils.hexZeroPad(a, 2).split('x')[1])
-        .reduce((prev, current) => prev + current, '')
-      toBytes = toBytes + tickets
+  for(let epochIndex = 0; epochIndex < ticketData.length; epochIndex++) {
+    for(let clusterIndex=0; clusterIndex < maxClustersToSelect-1; clusterIndex++) {
+      let clusterTicketForEpoch: number = 0;
+      if(ticketData[epochIndex]._tickets.length > clusterIndex) clusterTicketForEpoch = parseInt(ticketData[epochIndex]._tickets[clusterIndex]);
+      if(clusterTicketForEpoch >= (2**16)) throw new Error("Panic, ticket generation invalid");
+      toBytes = toBytes+clusterTicketForEpoch.toString(16).padStart(4, '0');
     }
+    console.log(`${(new Date()).toJSON()} Ticket submission data generated is ${toBytes}`)
   }
   return toBytes
 }

@@ -1,0 +1,21 @@
+{
+    "receiverConfig": {
+        "user": "postgres",
+        "host": "localhost",
+        "password": "postgres",
+        "database": "receiver",
+        "port": 5455,
+        "max": 5
+    },
+    "ticketConfig": {
+        "user": "postgres",
+        "host": "localhost",
+        "password": "postgres",
+        "database": "ticket",
+        "port": 5455,
+        "max": 5
+    },
+    "subgraphUrl": "https://api.thegraph.com/subgraphs/name/marlinprotocol/staking-arb1",
+    "rpc_url": "http://127.0.0.1:8545",
+    "signer_key": "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d"
+}

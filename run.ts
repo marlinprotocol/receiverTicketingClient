@@ -26,7 +26,7 @@ const paramsToCheck = [
 checkParams(paramsToCheck)
 
 // Create signer and provider for interacting with blockchain
-const provider = ethers.providers.getDefaultProvider(process.env.ARBITRUM_RPC_KEY) // arbitrum-goerli
+const provider = ethers.providers.getDefaultProvider(process.env.ARBITRUM_RPC_URL) // arbitrum-goerli
 const privateKey = `${process.env.SIGNER_PRIVATE_KEY}`
 const signer = new ethers.Wallet(privateKey, provider)
 
