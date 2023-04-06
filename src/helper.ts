@@ -82,11 +82,15 @@ export const induceDelay = async (ms: number = 1000): Promise<void> => {
 }
 
 export const normalizeTicketData = (epoch: Epoch): Epoch => {
-  const total = epoch._tickets.reduce((total, current) => total.add(current), BigNumber.from(0))
+  let total = epoch._tickets.reduce((total, current) => total.add(current), BigNumber.from(0))
+
+  if(total.eq(0)) {
+    epoch._tickets = epoch._tickets.map(e => "1");
+    total = BigNumber.from(epoch._tickets.length);
+  }
 
   // multiplely the scale by large number and divide at end to reduce the precision loss
-  let scale = BigNumber.from(0);
-  if(!total.eq(0)) scale = twoE16.mul(tenE36).div(total)
+  let scale = twoE16.mul(tenE36).div(total)
 
   const tickets: BigNumber[] = epoch._tickets.map((a) => scale.mul(a)).map((a) => a.div(tenE36))
   const sum = tickets.reduce((prev, current) => prev.add(current), BigNumber.from(0))
