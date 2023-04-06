@@ -278,7 +278,6 @@ export class Ticketing {
     // check if last operation is complete
     const pendingTx = lastOperationData[0].data
     const tx = utils.parseTransaction(pendingTx)
-    console.log(tx)
     const receipt = await this.signer.provider.getTransactionReceipt(tx.hash)
 
     if (receipt?.status) {

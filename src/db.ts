@@ -74,7 +74,6 @@ export class DB {
   public async getTimeOfFirstTicketAfter(ts: number): Promise<number> {
     const result = await this.ticketClient.query(findTimeOfFirstTicketsAfterQuery(ts));
     const firstTime = result.rows[0];
-    console.log(firstTime)
     if(!firstTime || !firstTime.min) return 0;
     return Date.parse(result.rows[0].min)/1000
   } 
@@ -136,7 +135,7 @@ export class DB {
 
 const getReceiptQueryString = (startTime: number, endTime: number, selectedClusters: string[]): string => {
   // TODO: remove this line
-  endTime += 1800;
+  endTime += 900;
   selectedClusters = selectedClusters.map(e => e.toLowerCase());
   const clusterList: string = "'"+[...selectedClusters, ...selectedClusters.map(e => utils.getAddress(e))].join("','")+"'"
   return `
