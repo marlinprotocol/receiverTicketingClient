@@ -22,10 +22,10 @@ export const createUnsignedTransaction = {
     signer: Signer,
     contractAddress: string,
     ticketData: Epoch[],
-    maxClustersToUse: number,
+    maxClustersToSelect: number,
     overrides?: Overrides
   ): Promise<PopulatedTransaction> => {
-    const ticketBytes = generateTicketBytesForEpochs(ticketData, maxClustersToUse)
+    const ticketBytes = generateTicketBytesForEpochs(ticketData, maxClustersToSelect)
     const clusterRewards: ClusterRewards = ClusterRewards__factory.connect(contractAddress, signer)
     return await clusterRewards.populateTransaction['issueTickets(bytes)'](ticketBytes, {
       ...overrides

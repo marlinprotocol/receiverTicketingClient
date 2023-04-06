@@ -18,7 +18,7 @@ const MAX_GAS_LIMIT = BigNumber.from(process.env.MAX_GAS_LIMIT || '10000000')
 const GAS_PRICE_INCREMENT = BigNumber.from(process.env.GAS_PRICE_INCREMENT || '110')
 const MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT = BigNumber.from(process.env.MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT || 96).toNumber()
 const TRANSACTION_WAIT_TIME = BigNumber.from(process.env.TRANSACTION_WAIT_TIME || '1200000').toNumber()
-const MAX_CLUSTERS_TO_SELECT = BigNumber.from(process.env.MAX_CLUSTERS_TO_SELECT || '96').toNumber()
+const MAX_CLUSTERS_TO_SELECT = BigNumber.from(process.env.MAX_CLUSTERS_TO_SELECT || '5').toNumber()
 const BATCH_TIME = BigNumber.from(process.env.BATCH_TIME || 24*60*60*1000+'').toNumber()
 const START_EPOCH = BigNumber.from(process.env.START_EPOCH || 3168+'').toNumber()
 

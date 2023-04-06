@@ -106,16 +106,6 @@ export const normalizeTicketData = (epoch: Epoch): Epoch => {
   }
 }
 
-const trimIfClusterMoreThanRequired = (ticketData: Epoch[], requiredClusters: number): Epoch[] => {
-  return ticketData.map((a) => {
-    return {
-      ...a,
-      _clusters: a._clusters.slice(0, requiredClusters),
-      _tickets: a._tickets.slice(0, requiredClusters)
-    }
-  })
-}
-
 // assumes that the ticket data is already sorted in asc order of epochs
 export const sortAndselectOnlyConsecutiveEpoch = (ticketData: Epoch[]): Epoch[] => {
   if (ticketData.length <= 1) {
@@ -144,8 +134,6 @@ export const sortAndselectOnlyConsecutiveEpoch = (ticketData: Epoch[]): Epoch[] 
 }
 
 export const generateTicketBytesForEpochs = (ticketData: Epoch[], maxClustersToSelect: number): BytesLike => {
-  ticketData = trimIfClusterMoreThanRequired(ticketData, maxClustersToSelect)
-
   // Ticket Structure
   // |--NetworkId(256 bits)--|--FromEpoch(32 bits)--|--N*Ticket(16 bits)--|
   const networkId = ticketData[0]._networkId
