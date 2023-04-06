@@ -36,8 +36,7 @@ export class ContractCache {
 
   public async init (): Promise<void> {
     this.receiver = await this.receiverStaking.signerToStaker(this.signer.getAddress())
-    // TODO: Add condition
-    // if(this.receiver == constants.AddressZero) throw new Error("Signer not registered");
+    if(this.receiver == constants.AddressZero) throw new Error("Signer not registered");
     this.START_TIME = (await this.receiverStaking.callStatic.START_TIME()).toNumber()
     this.EPOCH_LENGTH = (await this.receiverStaking.callStatic.EPOCH_LENGTH()).toNumber()
     this.initialized = true;

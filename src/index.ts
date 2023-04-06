@@ -225,6 +225,7 @@ export class Ticketing {
     // TODO: revert if clusters are not selected in an epoch, also def not filter
     ticketData = ticketData.map((a) => normalizeTicketData(a))
     ticketData = sortAndselectOnlyConsecutiveEpoch(ticketData)
+    const nonce = await this.signer.getTransactionCount();
 
     // if no epoch is there, then we job will be paused for some time
     if (ticketData.length > 0) {
@@ -233,7 +234,7 @@ export class Ticketing {
         this.ticketConfig.contractAddresses.ClusterRewards,
         ticketData,
         MAX_CLUSTERS_TO_SELECT,
-        { ...options, gasPrice, gasLimit }
+        { ...options, gasPrice, gasLimit, nonce }
       )
 
       const newOperationNumber = BigNumber.from(await this.db.getLastOperationNumber())
