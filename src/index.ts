@@ -19,7 +19,7 @@ const GAS_PRICE_INCREMENT = BigNumber.from(process.env.GAS_PRICE_INCREMENT || '1
 const MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT = BigNumber.from(process.env.MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT || 96).toNumber()
 const TRANSACTION_WAIT_TIME = BigNumber.from(process.env.TRANSACTION_WAIT_TIME || '1200000').toNumber()
 const MAX_CLUSTERS_TO_SELECT = BigNumber.from(process.env.MAX_CLUSTERS_TO_SELECT || '5').toNumber()
-const BATCH_TIME = BigNumber.from(process.env.BATCH_TIME || 24*60*60*1000+'').toNumber()
+const BATCH_TIME = BigNumber.from(process.env.BATCH_TIME || 4*60*60*1000+'').toNumber()
 const START_EPOCH = BigNumber.from(process.env.START_EPOCH || 3168+'').toNumber()
 
 export class Ticketing {
@@ -222,7 +222,6 @@ export class Ticketing {
     console.log(ticketData);
 
     // select epochs that have atleast one cluster present, then normalize the data
-    // TODO: revert if clusters are not selected in an epoch, also def not filter
     ticketData = ticketData.map((a) => normalizeTicketData(a))
     ticketData = sortAndselectOnlyConsecutiveEpoch(ticketData)
     const nonce = await this.signer.getTransactionCount();
@@ -336,7 +335,6 @@ export class Ticketing {
 
     // console.log({ signedTx: utils.parseTransaction(signedTx) })
     // Old tx related data is deleted
-    // TODO: Instead update the old tx and hash with new tx and hash
     await this.db.deleteOperation(operation)
 
     for (let index = 0; index < epochs.length; index++) {
@@ -365,13 +363,12 @@ export class Ticketing {
 
   public async fetchAllTicketData (_networkId: string, _epochs: string[], selectedClusters: string[][]): Promise<Epoch[]> {
     this.if_init()
-    const epochEndTimes: [number, number][] = []
+    const epochBoundaries: [number, number][] = []
     for (let index = 0; index < _epochs.length; index++) {
       const element = _epochs[index]
-      epochEndTimes.push(await this.contractCache.getEpochTime(element))
+      epochBoundaries.push(await this.contractCache.getEpochTime(element))
     }
-    // TODO: use startTime and end time instead of just  using epochtime and calculating start time in query
-    return await this.db.fetchTicketsForEpochs(_networkId, _epochs, epochEndTimes, selectedClusters)
+    return await this.db.fetchTicketsForEpochs(_networkId, _epochs, epochBoundaries, selectedClusters)
   }
 
   public async getClustersSelectedAfterGivenEpoch (epoch: string): Promise<SelectedClusterData[]> {

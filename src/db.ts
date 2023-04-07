@@ -134,8 +134,6 @@ export class DB {
 }
 
 const getReceiptQueryString = (startTime: number, endTime: number, selectedClusters: string[]): string => {
-  // TODO: remove this line
-  endTime += 900;
   selectedClusters = selectedClusters.map(e => e.toLowerCase());
   const clusterList: string = "'"+[...selectedClusters, ...selectedClusters.map(e => utils.getAddress(e))].join("','")+"'"
   return `
