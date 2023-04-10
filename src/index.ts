@@ -192,7 +192,7 @@ export class Ticketing {
     // and send txs till last submitted epoch is less than one day olds
     let currentEpoch = await this.contractCache.getLatestEpoch();
     console.log(`${(new Date()).toJSON()} Current epoch is ${currentEpoch}`)
-    if(currentEpoch - lastSubmittedEpoch < MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT) {
+    if(currentEpoch - lastSubmittedEpoch < MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT + 2) { // +2 ensure only past epochs get tickets
       console.log(`${(new Date()).toJSON()} Waiting to reach ${MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT} epochs before bundling tickets`)
       return BATCH_TIME
     };
