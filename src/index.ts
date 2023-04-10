@@ -314,6 +314,8 @@ export class Ticketing {
 
     console.log(`${(new Date()).toJSON()} Transaction is not mined, retrying`)
     
+    // update tx nonce in case prev tx failed
+    tx.nonce = await this.signer.getTransactionCount();
     // this means transaction is unmined and it's gas price can be increased
     const signedTx = await this.bumpGas(tx, lastOperationData[0].operation, lastOperationData.map(e => e.epoch));
     console.log(`${(new Date()).toJSON()} Gas bumped for tx`)
