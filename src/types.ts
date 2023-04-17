@@ -8,10 +8,10 @@ export interface Operation {
   data: string
 }
 export interface Epoch {
-  _networkId: string
-  _epoch: string
-  _clusters: string[]
-  _tickets: string[]
+  networkId: string
+  epoch: string
+  clusters: string[]
+  tickets: string[]
 }
 
 // used to match the return type from postgres

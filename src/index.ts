@@ -3,6 +3,7 @@ import { Subgraph } from './subgraph'
 import { ContractCache } from './contractCache'
 import { DB } from './db'
 import {
+  fetchData,
   filterTicketData,
   increaseGasForTx,
   induceDelay,
@@ -21,6 +22,11 @@ const TRANSACTION_WAIT_TIME = BigNumber.from(process.env.TRANSACTION_WAIT_TIME |
 const MAX_CLUSTERS_TO_SELECT = BigNumber.from(process.env.MAX_CLUSTERS_TO_SELECT || '5').toNumber()
 const BATCH_TIME = BigNumber.from(process.env.BATCH_TIME || 4*60*60*1000+'').toNumber()
 const START_EPOCH = BigNumber.from(process.env.START_EPOCH || 3168+'').toNumber()
+
+//telemetry vars
+const TELEMETRY_URL = process.env.TELEMETRY_URL;
+const TELEMETRY_DATA_LENGTH = BigNumber.from(process.env.TELEMETRY_DATA_LENGTH || 24*60*60+'').toNumber();
+const TELEMETRY_INTERVAL = BigNumber.from(process.env.TELEMETRY_INTERVAL || '900').toNumber();
 
 export class Ticketing {
   private readonly dataConfig: DataConfig
@@ -118,6 +124,42 @@ export class Ticketing {
     if (!this.initialized) throw new Error('Not initialized, call object.init(), before using')
   }
   // Init functions ends
+
+  // telemetry starts
+  public async telemetryJob(networkId: string): Promise<void> {
+    this.if_init();
+    while(true && TELEMETRY_URL) {
+      try {
+        this.submitTelemetry(networkId);
+        await induceDelay(TELEMETRY_INTERVAL*1000)
+      } catch(ex) {
+        console.log(ex)
+        await induceDelay(1000)
+      }
+    }
+  }
+
+  public async submitTelemetry(networkId: string): Promise<void> {
+    const firstEpoch = (await this.contractCache.getEpoch(Date.now()/1000-TELEMETRY_DATA_LENGTH)) - 1;
+    const epochLength = await this.contractCache.EPOCH_LENGTH;
+    let epochs = [...Array(TELEMETRY_DATA_LENGTH/epochLength).keys()].map((a) => (firstEpoch+a).toString());
+    const epochData = await this.fetchSelectedTicketData(networkId, epochs);
+
+    console.log({epochData: JSON.stringify(epochData), receiver: this.contractCache.receiver})
+    
+    const options = {
+      url: TELEMETRY_URL,
+      method: 'post',
+      headers: { 'Content-Type': 'application/json' },
+      body: {epochData, receiver: this.contractCache.receiver}
+    };
+
+    const result = await (await fetchData(options)).json()
+    if (result.errors) {
+      throw new Error('Error while pushing telemetry')
+    }
+  }
+  // telemetry ends
 
   // daily job starts
   public async dailyJob (networkId: string, repeatEveryMs: number, ifErrorRetryAfter: number): Promise<never> {
@@ -244,7 +286,7 @@ export class Ticketing {
       for (let index = 0; index < ticketData.length; index++) {
         const element = ticketData[index]
 
-        await this.db.savePendingTransaction(newOperationNumber, parseInt(element._epoch), signedTx)
+        await this.db.savePendingTransaction(newOperationNumber, parseInt(element.epoch), signedTx)
       }
       const isValid = _epochs.every(async (epoch) => {
         return await this.contractCache.checkIfTicketIsIssued(epoch)
@@ -347,12 +389,12 @@ export class Ticketing {
     return signedTx;
   }
 
-  public async fetchSelectedTicketData (_networkId: string, _epochs: string[]): Promise<Epoch[]> {
+  public async fetchSelectedTicketData (networkId: string, _epochs: string[]): Promise<Epoch[]> {
     this.if_init()
     const clustersToSelect: string[][] = await Promise.all(
-      _epochs.map(async (a) => (await this.contractCache.getSelectedClusters(_networkId, a)).map(a => a.toLowerCase()))
+      _epochs.map(async (a) => (await this.contractCache.getSelectedClusters(networkId, a)).map(a => a.toLowerCase()))
     )
-    let ticketData = await this.fetchAllTicketData(_networkId, _epochs, clustersToSelect)
+    let ticketData = await this.fetchAllTicketData(networkId, _epochs, clustersToSelect)
     ticketData = filterTicketData(ticketData, clustersToSelect)
     return ticketData
   }
@@ -363,14 +405,14 @@ export class Ticketing {
     return result;
   }
 
-  public async fetchAllTicketData (_networkId: string, _epochs: string[], selectedClusters: string[][]): Promise<Epoch[]> {
+  public async fetchAllTicketData (networkId: string, _epochs: string[], selectedClusters: string[][]): Promise<Epoch[]> {
     this.if_init()
     const epochBoundaries: [number, number][] = []
     for (let index = 0; index < _epochs.length; index++) {
       const element = _epochs[index]
       epochBoundaries.push(await this.contractCache.getEpochTime(element))
     }
-    return await this.db.fetchTicketsForEpochs(_networkId, _epochs, epochBoundaries, selectedClusters)
+    return await this.db.fetchTicketsForEpochs(networkId, _epochs, epochBoundaries, selectedClusters)
   }
 
   public async getClustersSelectedAfterGivenEpoch (epoch: string): Promise<SelectedClusterData[]> {
@@ -420,7 +462,7 @@ export class Ticketing {
 
     let ticketData: Epoch[] = await this.fetchSelectedTicketData(networkId, missedEpochs)
 
-    ticketData = ticketData.filter((a) => a._clusters.length > 0).map((a) => normalizeTicketData(a))
+    ticketData = ticketData.filter((a) => a.clusters.length > 0).map((a) => normalizeTicketData(a))
     ticketData = sortAndselectOnlyConsecutiveEpoch(ticketData)
 
     let gasPrice
@@ -453,7 +495,7 @@ export class Ticketing {
     for (let index = 0; index < ticketData.length; index++) {
       const element = ticketData[index]
 
-      await this.db.savePendingTransaction(newOperationNumber, parseInt(element._epoch), signedTx)
+      await this.db.savePendingTransaction(newOperationNumber, parseInt(element.epoch), signedTx)
     }
     const isValid = missedEpochs.every(async (epoch) => {
       return await this.contractCache.checkIfTicketIsIssued(epoch)

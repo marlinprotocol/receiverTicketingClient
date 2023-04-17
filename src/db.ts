@@ -28,8 +28,8 @@ export class DB {
     this.receiver = receiverAddress;
   }
 
-  public async fetchTicketsForEpoch (_networkId: string, _epoch: string, epochEndTime: [number, number], selectedClusters: string[]): Promise<Epoch> {
-    const query = getReceiptQueryString(...epochEndTime, selectedClusters);
+  public async fetchTicketsForEpoch (networkId: string, epoch: string, epochBoundaries: [number, number], selectedClusters: string[]): Promise<Epoch> {
+    const query = getReceiptQueryString(...epochBoundaries, selectedClusters);
     const result = await this.ticketClient.query(query)
 
     if (result.rowCount !== result.rows.length) {
@@ -38,14 +38,14 @@ export class DB {
     const clusterData = result.rows as ClusterQueryData[]
 
     return {
-      _networkId,
-      _epoch,
-      _clusters: clusterData.map((a) => a.cluster),
-      _tickets: clusterData.map((a) => a.count)
+      networkId,
+      epoch,
+      clusters: clusterData.map((a) => a.cluster),
+      tickets: clusterData.map((a) => a.count)
     }
   }
 
-  public async fetchTicketsForEpochs (_networkId: string, _epochs: string[], epochBoundaries: [number, number][], selectedClusters: string[][]): Promise<Epoch[]> {
+  public async fetchTicketsForEpochs (networkId: string, _epochs: string[], epochBoundaries: [number, number][], selectedClusters: string[][]): Promise<Epoch[]> {
     if (_epochs.length !== epochBoundaries.length && _epochs.length !== selectedClusters.length) {
       throw new Error('Arity mismatch')
     }
@@ -53,18 +53,16 @@ export class DB {
     const epochs: Epoch[] = []
 
     for (let index = 0; index < epochBoundaries.length; index++) {
-      const _epoch = _epochs[index]
-      const epochStartTime = epochBoundaries[index][0]
-      const epochEndTime = epochBoundaries[index][1]
-      const query = getReceiptQueryString(epochStartTime, epochEndTime, selectedClusters[index])
+      const epoch = _epochs[index]
+      const query = getReceiptQueryString(...epochBoundaries[index], selectedClusters[index])
       const result = await this.ticketClient.query(query)
       const clusterData = result.rows as ClusterQueryData[]
 
       epochs.push({
-        _networkId,
-        _epoch,
-        _clusters: clusterData.map((a) => a.cluster),
-        _tickets: clusterData.map((a) => a.count)
+        networkId,
+        epoch,
+        clusters: clusterData.map((a) => a.cluster),
+        tickets: clusterData.map((a) => a.count)
       })
     }
 
@@ -138,16 +136,16 @@ const getReceiptQueryString = (startTime: number, endTime: number, selectedClust
   const clusterList: string = "'"+[...selectedClusters, ...selectedClusters.map(e => utils.getAddress(e))].join("','")+"'"
   return `
     SELECT rank_filter.cluster, COUNT(*) FROM (
-        SELECT msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster, min(msg_recvs.ts) as send_min,
+        SELECT msg_recvs.message_id, msg_recvs.cluster, min(msg_recvs.ts) as send_min,
         rank() OVER (
-            PARTITION BY (msg_recvs.host, msg_recvs.message_id)
+            PARTITION BY (msg_recvs.message_id)
             ORDER BY min(msg_recvs.ts) ASC, min(msg_recvs."offset") ASC
         )
         FROM msg_recvs
         WHERE msg_recvs.ts > (to_timestamp(${startTime}))
         AND msg_recvs.ts < (to_timestamp(${endTime}))
         AND msg_recvs.cluster in (${clusterList})
-        GROUP BY (msg_recvs.host, msg_recvs.message_id, msg_recvs.cluster)
+        GROUP BY (msg_recvs.message_id, msg_recvs.cluster)
     ) rank_filter WHERE RANK < 4 AND send_min > (to_timestamp(${startTime})) AND send_min < (to_timestamp(${endTime}))  GROUP BY rank_filter.cluster;
     `
 }

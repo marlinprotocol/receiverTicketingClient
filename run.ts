@@ -55,12 +55,14 @@ const ticketing = new Ticketing(config, signer)
 ticketing
   .init()
   .then(
-    async (a) =>
+    async (a) => {
+      await a.telemetryJob(process.env.NETWORK_ID)
       await a.dailyJob(
         `${process.env.NETWORK_ID}`,
         parseInt(`${process.env.RUN_JOB_AFTER_MILLISECOND}`),
         parseInt(`${process.env.IF_FAILED_RETRY_AFTER}`)
       )
+    }
   )
   .catch(console.log)
 

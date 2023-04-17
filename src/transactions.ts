@@ -37,9 +37,9 @@ export const createUnsignedTransaction = {
     ticketData: Epoch[],
     overrides?: Overrides
   ): Promise<PopulatedTransaction> => {
-    const networkId = ticketData[0]._networkId;
-    const epochs = ticketData.map(e => e._epoch);
-    const tickets = ticketData.map(e => e._tickets);
+    const networkId = ticketData[0].networkId;
+    const epochs = ticketData.map(e => e.epoch);
+    const tickets = ticketData.map(e => e.tickets);
     const clusterRewards: ClusterRewards = ClusterRewards__factory.connect(contractAddress, signer)
     return await clusterRewards.populateTransaction['issueTickets(bytes32,uint24[],uint16[][])'](networkId, epochs, tickets, {
       ...overrides
