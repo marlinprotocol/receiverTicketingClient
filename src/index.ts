@@ -153,6 +153,7 @@ export class Ticketing {
     };
     try {
       await (await fetchData(options)).json()
+      console.log(`${(new Date()).toJSON()} Telemetry submitted for last ${TELEMETRY_DATA_LENGTH} seconds`);
     } catch(e) {
       console.error(e);
       throw new Error('Error while pushing telemetry')
