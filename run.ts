@@ -56,8 +56,8 @@ ticketing
   .init()
   .then(
     async (a) => {
-      await a.telemetryJob(process.env.NETWORK_ID)
-      await a.dailyJob(
+      a.telemetryJob(process.env.NETWORK_ID)
+      a.dailyJob(
         `${process.env.NETWORK_ID}`,
         parseInt(`${process.env.RUN_JOB_AFTER_MILLISECOND}`),
         parseInt(`${process.env.IF_FAILED_RETRY_AFTER}`)
