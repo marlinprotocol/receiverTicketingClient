@@ -144,14 +144,12 @@ export class Ticketing {
     const epochLength = await this.contractCache.EPOCH_LENGTH;
     let epochs = [...Array(TELEMETRY_DATA_LENGTH/epochLength).keys()].map((a) => (firstEpoch+a).toString());
     const epochData = await this.fetchSelectedTicketData(networkId, epochs);
-
-    console.log({epochData: JSON.stringify(epochData), receiver: this.contractCache.receiver})
     
     const options = {
       url: TELEMETRY_URL,
       method: 'post',
       headers: { 'Content-Type': 'application/json' },
-      body: {epochData, receiver: this.contractCache.receiver}
+      body: JSON.stringify({epochData, receiver: this.contractCache.receiver})
     };
 
     const result = await (await fetchData(options)).json()
