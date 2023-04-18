@@ -130,7 +130,7 @@ export class Ticketing {
     this.if_init();
     while(true && TELEMETRY_URL) {
       try {
-        this.submitTelemetry(networkId);
+        await this.submitTelemetry(networkId);
         await induceDelay(TELEMETRY_INTERVAL*1000)
       } catch(ex) {
         console.log(ex)
@@ -151,9 +151,10 @@ export class Ticketing {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({epochData, receiver: this.contractCache.receiver})
     };
-
-    const result = await (await fetchData(options)).json()
-    if (result.errors) {
+    try {
+      await (await fetchData(options)).json()
+    } catch(e) {
+      console.error(e);
       throw new Error('Error while pushing telemetry')
     }
   }
