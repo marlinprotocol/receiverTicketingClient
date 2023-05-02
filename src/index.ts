@@ -140,6 +140,7 @@ export class Ticketing {
   }
 
   public async submitTelemetry(networkId: string): Promise<void> {
+    console.log(`${(new Date()).toJSON()} generating Telemetry for last ${TELEMETRY_DATA_LENGTH} seconds`);
     const firstEpoch = (await this.contractCache.getEpoch(Date.now()/1000-TELEMETRY_DATA_LENGTH)) - 1;
     const epochLength = await this.contractCache.EPOCH_LENGTH;
     let epochs = [...Array(TELEMETRY_DATA_LENGTH/epochLength).keys()].map((a) => (firstEpoch+a).toString());
