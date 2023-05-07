@@ -14,6 +14,15 @@ export const submitTicketForEpochs = async (
   overrides?: Overrides
 ): Promise<ContractTransaction> => {
   const clusterRewards: ClusterRewards = ClusterRewards__factory.connect(contractAddress, signer)
+  const expectedGasLimit = await clusterRewards.estimateGas['issueTickets(bytes)'](ticketBytes)
+  if(overrides?.gasLimit) {
+    if(overrides.gasLimit instanceof Promise) {
+      overrides.gasLimit = await overrides.gasLimit
+    }
+    if(expectedGasLimit.gt(overrides.gasLimit)) {
+      throw new Error(`${(new Date()).toJSON()} Gas limit provided (${overrides.gasLimit}) is less than expected (${expectedGasLimit})`)
+    }
+  }
   return await clusterRewards['issueTickets(bytes)'](ticketBytes, { ...overrides })
 }
 
@@ -27,6 +36,15 @@ export const createUnsignedTransaction = {
   ): Promise<PopulatedTransaction> => {
     const ticketBytes = generateTicketBytesForEpochs(ticketData, maxClustersToSelect)
     const clusterRewards: ClusterRewards = ClusterRewards__factory.connect(contractAddress, signer)
+    const expectedGasLimit = await clusterRewards.estimateGas['issueTickets(bytes)'](ticketBytes)
+    if(overrides?.gasLimit) {
+      if(overrides.gasLimit instanceof Promise) {
+        overrides.gasLimit = await overrides.gasLimit
+      }
+      if(expectedGasLimit.gt(overrides.gasLimit)) {
+        throw new Error(`${(new Date()).toJSON()} Gas limit provided (${overrides.gasLimit}) is less than expected (${expectedGasLimit})`)
+      }
+    }
     return await clusterRewards.populateTransaction['issueTickets(bytes)'](ticketBytes, {
       ...overrides
     })
@@ -41,6 +59,15 @@ export const createUnsignedTransaction = {
     const epochs = ticketData.map(e => e.epoch);
     const tickets = ticketData.map(e => e.tickets);
     const clusterRewards: ClusterRewards = ClusterRewards__factory.connect(contractAddress, signer)
+    const expectedGasLimit = await clusterRewards.estimateGas['issueTickets(bytes32,uint24[],uint16[][])'](networkId, epochs, tickets)
+    if(overrides?.gasLimit) {
+      if(overrides.gasLimit instanceof Promise) {
+        overrides.gasLimit = await overrides.gasLimit
+      }
+      if(expectedGasLimit.gt(overrides.gasLimit)) {
+        throw new Error(`${(new Date()).toJSON()} Gas limit provided (${overrides.gasLimit}) is less than expected (${expectedGasLimit})`)
+      }
+    }
     return await clusterRewards.populateTransaction['issueTickets(bytes32,uint24[],uint16[][])'](networkId, epochs, tickets, {
       ...overrides
     })
