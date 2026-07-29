@@ -60,6 +60,8 @@ export class ContractCache {
   }
 
   public async getSelectedClusters (networkId: string, epoch: BigNumberish): Promise<string[]> {
+    this.if_init()
+
     const clusterSelector = this.allClusterSelectors[networkId]
     if (!clusterSelector) {
       throw new Error('epoch selector not available for given network')
@@ -75,7 +77,20 @@ export class ContractCache {
       return this.selectedNodesPerNetwork[networkId][epoch]
     }
 
-    const selectedNodes = await clusterSelector.callStatic.getClusters(epoch)
+    let selectedNodes: string[]
+    try {
+      selectedNodes = await clusterSelector.callStatic.getClusters(epoch)
+    } catch (ex) {
+      const isCallException = (ex as { code?: string })?.code === 'CALL_EXCEPTION'
+      const isPastEpoch = epoch < this.getEpoch(Math.floor(Date.now() / 1000))
+ 
+      if (!isCallException || !isPastEpoch) {
+        throw ex
+      }
+
+      console.warn(`${(new Date()).toJSON()} getClusters reverted for past epoch ${epoch} on network ${networkId}, treating as no clusters selected`)
+      selectedNodes = []
+    }
     this.selectedNodesPerNetwork[networkId][epoch] = selectedNodes
     return selectedNodes
   }

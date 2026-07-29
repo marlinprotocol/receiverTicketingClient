@@ -456,7 +456,7 @@ export class Ticketing {
   public async submitMissingEpochs(lastEpochLocal: number, lastEpoch: number, networkId: string, options?: Overrides): Promise<number> {
     const missedEpochs = [];
     for(let epoch=lastEpochLocal; epoch <= lastEpoch; epoch++) {
-      const isIssued = this.contractCache.checkIfTicketIsIssued(epoch+"");
+      const isIssued = await this.contractCache.checkIfTicketIsIssued(epoch+"");
       if(!isIssued) missedEpochs.push(epoch);
       if(missedEpochs.length >= MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT) break;
     }
