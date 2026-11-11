@@ -164,9 +164,7 @@ const createCombinedTable = (receiver: string): string => {
       hash character varying(66) NOT NULL,
       data character varying NOT NULL
   );
-  
-  ALTER TABLE IF EXISTS public.operations_${receiver}
-      OWNER to postgres;
+
   
   CREATE TABLE IF NOT EXISTS public.lastSubmitted_${receiver}
   (
@@ -174,9 +172,7 @@ const createCombinedTable = (receiver: string): string => {
       lastEpoch integer NOT NULL,
       PRIMARY KEY (index)
   );
-  
-  ALTER TABLE IF EXISTS public.lastSubmitted_${receiver}
-      OWNER to postgres;`
+`
 }
 
 const getLastOperationData = (operation: number, receiver: string): string => {

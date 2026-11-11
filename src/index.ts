@@ -194,7 +194,8 @@ export class Ticketing {
     console.log(`${(new Date()).toJSON()} All pending transactions processed`);
 
     let lastSubmittedEpochLocal = await this.lastSubmitedEpochAsPerLocalDb()
-    let lastSubmittedEpoch = (await this.getLastSubmittedEpochAsPerSubgraph(this.contractCache.receiver))
+    // TicketsIssued is emitted with msg.sender, which is the signer, not the staker
+    let lastSubmittedEpoch = (await this.getLastSubmittedEpochAsPerSubgraph(await this.signer.getAddress()))
 
     if(lastSubmittedEpochLocal) {
       if(lastSubmittedEpochLocal < lastSubmittedEpoch) {
