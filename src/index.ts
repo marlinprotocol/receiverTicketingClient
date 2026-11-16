@@ -302,13 +302,7 @@ export class Ticketing {
 
         await this.db.savePendingTransaction(newOperationNumber, parseInt(element.epoch), signedTx)
       }
-      const isValid = _epochs.every(async (epoch) => {
-        return await this.contractCache.checkIfTicketIsIssued(epoch)
-      });
-  
-      // Note: This error should never be triggered (except in race conditions)
-      // if triggered rerun and submit missing epochs
-      if(!isValid) return 1;
+      // gas estimation above fails if tickets for any of these epochs are already issued
       await this.signer.provider.sendTransaction(signedTx)
       console.log(`${(new Date()).toJSON()} First ticket found at `);
       return TRANSACTION_WAIT_TIME
@@ -482,17 +476,33 @@ export class Ticketing {
   }
 
   public async submitMissingEpochs(lastEpochLocal: number, lastEpoch: number, networkId: string, options?: Overrides): Promise<number> {
-    const missedEpochs = [];
-    for(let epoch=lastEpochLocal; epoch <= lastEpoch; epoch++) {
+    const missedEpochs: string[] = [];
+    let lastCheckedEpoch = lastEpochLocal;
+    for(let epoch=lastEpochLocal+1; epoch <= lastEpoch; epoch++) {
       const isIssued = await this.contractCache.checkIfTicketIsIssued(epoch+"");
-      if(!isIssued) missedEpochs.push(epoch);
+      if(!isIssued) missedEpochs.push(epoch+"");
+      lastCheckedEpoch = epoch;
       if(missedEpochs.length >= MAX_EPOCHS_PER_TRANSACTION_TO_SUBMIT) break;
+    }
+
+    if(missedEpochs.length == 0) {
+      // nothing is missing, continue from the last epoch as per subgraph
+      console.log(`${(new Date()).toJSON()} Tickets are issued for all epochs till ${lastEpoch}`);
+      await this.db.updateLatestEpoch(lastEpoch);
+      return 0;
     }
 
     let ticketData: Epoch[] = await this.fetchSelectedTicketData(networkId, missedEpochs)
 
     ticketData = ticketData.filter((a) => a.clusters.length > 0).map((a) => normalizeTicketData(a))
     ticketData = sortAndselectOnlyConsecutiveEpoch(ticketData)
+
+    if(ticketData.length == 0) {
+      // no clusters are selected in the missing epochs, so tickets can't be issued for them
+      console.log(`${(new Date()).toJSON()} No clusters selected in epochs ${missedEpochs[0]} to ${lastCheckedEpoch} with no tickets, skipping till ${lastCheckedEpoch}`);
+      await this.db.updateLatestEpoch(lastCheckedEpoch);
+      return 0;
+    }
 
     let gasPrice
 
@@ -509,11 +519,13 @@ export class Ticketing {
       gasLimit = MAX_GAS_LIMIT
     }
 
+    const nonce = await this.signer.getTransactionCount();
+
     const transaction = await createUnsignedTransaction.submitTicketForAdhocEpochs(
       this.signer,
       this.ticketConfig.contractAddresses.ClusterRewards,
       ticketData,
-      { ...options, gasPrice, gasLimit }
+      { ...options, gasPrice, gasLimit, nonce }
     )
 
     const newOperationNumber = BigNumber.from(await this.db.getLastOperationNumber())
@@ -526,13 +538,7 @@ export class Ticketing {
 
       await this.db.savePendingTransaction(newOperationNumber, parseInt(element.epoch), signedTx)
     }
-    const isValid = missedEpochs.every(async (epoch) => {
-      return await this.contractCache.checkIfTicketIsIssued(epoch)
-    });
-
-    // Note: This error should never be triggered (except in race conditions)
-    // if triggered rerun and submit missing epochs
-    if(!isValid) return 1;
+    // gas estimation above fails if tickets for any of these epochs are already issued
     await this.signer.provider.sendTransaction(signedTx)
     return TRANSACTION_WAIT_TIME
   }
