@@ -7,7 +7,10 @@ const twoE16 = (BigNumber.from(2).pow(16)).sub(1)
 const tenE36 = BigNumber.from(10).pow(36)
 
 export async function fetchData (requestData: any): Promise<any> {
-  const data = await fetch(requestData.url, { headers: requestData.headers, method: requestData.method, body: requestData.body })
+  // time in ms after which a http request (subgraph, telemetry) is given up, it covers the response body as well
+  // without it a hung connection blocks the caller forever
+  const timeout = BigNumber.from(process.env.HTTP_TIMEOUT || '30000').toNumber()
+  const data = await fetch(requestData.url, { headers: requestData.headers, method: requestData.method, body: requestData.body, timeout })
   return data
 }
 
