@@ -347,24 +347,39 @@ export class Ticketing {
     // receipt does not exist, i.e, it is not mined or tx failed and status is false
 
     // to avoid any edge case, manually check if all the epochs in the given transaction are included
-    let lastOperationIncomplete: boolean = false
-    let atleastOneEpochComplete: boolean = false
+    // epochs are fetched in descending order
+    const issued: boolean[] = []
     for (let index = 0; index < lastOperationData.length; index++) {
       const data = lastOperationData[index]
-      const isSubmitted = await this.contractCache.checkIfTicketIsIssued(data.epoch.toString())
-
-      if (isSubmitted) {
-        atleastOneEpochComplete = true;
-        await this.db.deleteEpoch(data.epoch)
-      } else {
-        lastOperationIncomplete = true;
-      }
+      issued.push(await this.contractCache.checkIfTicketIsIssued(data.epoch.toString()))
     }
 
-    // repeat the process once again (this will clean up all junk epochs)
-    if (atleastOneEpochComplete && lastOperationIncomplete) {
-      // missing epoch will take care of this
-      // TODO: What if first epoch does this, in that missing epoch might not be able to take care
+    if (issued.every((e) => e)) {
+      // tickets for all epochs are issued by some other transaction, nothing left to send
+      console.log(`${(new Date()).toJSON()} Tickets for all epochs in last transaction are already issued`);
+      await this.db.deleteOperation(lastOperationData[0].operation)
+      await this.db.updateLatestEpoch(Math.max(...lastOperationData.map(e => e.epoch)));
+      return 0
+    }
+
+    if (issued.some((e) => e)) {
+      // sending the same transaction again will revert as some of its epochs are issued, so drop it
+      console.log(`${(new Date()).toJSON()} Tickets for some epochs in last transaction are already issued, dropping it`);
+      await this.db.deleteOperation(lastOperationData[0].operation)
+      // epochs before the first epoch that is not issued are done, rest are generated again
+      const firstPendingEpoch = Math.min(...lastOperationData.filter((_, index) => !issued[index]).map(e => e.epoch))
+      const issuedBeforePending = lastOperationData.filter((e, index) => issued[index] && e.epoch < firstPendingEpoch).map(e => e.epoch)
+      if (issuedBeforePending.length > 0) {
+        await this.db.updateLatestEpoch(Math.max(...issuedBeforePending));
+      }
+      return 0
+    }
+
+    if (receipt) {
+      // transaction is mined but reverted, sending the same data again will revert again
+      // drop it so that tickets are generated again
+      console.log(`${(new Date()).toJSON()} Last transaction ${tx.hash} reverted, dropping it`);
+      await this.db.deleteOperation(lastOperationData[0].operation)
       return 0
     }
 
