@@ -8,7 +8,8 @@ import {
   increaseGasForTx,
   induceDelay,
   normalizeTicketData,
-  sortAndselectOnlyConsecutiveEpoch
+  sortAndselectOnlyConsecutiveEpoch,
+  telemetryRetryDelay
 } from './helper'
 import { createUnsignedTransaction } from './transactions'
 import { type Epoch, type TicketConfig, type DataConfig, type SelectedClusterData } from './types'
@@ -128,13 +129,18 @@ export class Ticketing {
   // telemetry starts
   public async telemetryJob(networkId: string): Promise<void> {
     this.if_init();
+    let failures = 0;
     while(true && TELEMETRY_URL) {
       try {
         await this.submitTelemetry(networkId);
+        failures = 0;
         await induceDelay(TELEMETRY_INTERVAL*1000)
       } catch(ex) {
         console.log(ex)
-        await induceDelay(1000)
+        failures++;
+        const retryAfter = telemetryRetryDelay(failures, TELEMETRY_INTERVAL*1000);
+        console.log(`${(new Date()).toJSON()} Telemetry failed ${failures} times in a row, retrying after ${retryAfter} ms`);
+        await induceDelay(retryAfter)
       }
     }
   }
