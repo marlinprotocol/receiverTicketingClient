@@ -64,7 +64,11 @@ ticketing
       )
     }
   )
-  .catch(console.log)
+  .catch((err) => {
+    // exit with error so that the process supervisor restarts the client
+    console.log(err)
+    process.exit(1)
+  })
 
 function checkParams (params: string[]): void {
   for (let index = 0; index < params.length; index++) {

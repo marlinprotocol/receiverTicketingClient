@@ -114,12 +114,9 @@ export class ContractCache {
 
   public async checkIfTicketIsIssued (epoch: string): Promise<boolean> {
     this.if_init();
-    
-    try {
-      return await this.clusterRewards.callStatic.isTicketsIssued(this.receiver, epoch)
-    } catch (ex) {
-      return false
-    }
+
+    // errors are not caught here, a failed call does not mean that tickets are not issued
+    return await this.clusterRewards.callStatic.isTicketsIssued(this.receiver, epoch)
   }
 
   public async getLatestEpoch (): Promise<number> {

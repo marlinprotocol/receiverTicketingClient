@@ -7,7 +7,10 @@ const twoE16 = (BigNumber.from(2).pow(16)).sub(1)
 const tenE36 = BigNumber.from(10).pow(36)
 
 export async function fetchData (requestData: any): Promise<any> {
-  const data = await fetch(requestData.url, { headers: requestData.headers, method: requestData.method, body: requestData.body })
+  // time in ms after which a http request (subgraph, telemetry) is given up, it covers the response body as well
+  // without it a hung connection blocks the caller forever
+  const timeout = BigNumber.from(process.env.HTTP_TIMEOUT || '30000').toNumber()
+  const data = await fetch(requestData.url, { headers: requestData.headers, method: requestData.method, body: requestData.body, timeout })
   return data
 }
 
@@ -79,6 +82,16 @@ export function increaseGasForTx (
 
 export const induceDelay = async (ms: number = 1000): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Telemetry data is generated again on every retry, which is a lot of db queries and rpc calls,
+// so wait at least a minute after a failure and double the wait on every failure after that.
+// Retries are never more frequent than the telemetry interval itself and at most one hour apart.
+export const telemetryRetryDelay = (failures: number, intervalMs: number): number => {
+  const minDelay = Math.max(60 * 1000, intervalMs)
+  const maxDelay = Math.max(60 * 60 * 1000, intervalMs)
+  const delay = minDelay * Math.pow(2, Math.min(Math.max(failures, 1) - 1, 16))
+  return Math.min(delay, maxDelay)
 }
 
 export const normalizeTicketData = (epoch: Epoch): Epoch => {
