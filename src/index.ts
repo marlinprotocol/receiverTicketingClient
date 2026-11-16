@@ -195,7 +195,16 @@ export class Ticketing {
 
     let lastSubmittedEpochLocal = await this.lastSubmitedEpochAsPerLocalDb()
     // TicketsIssued is emitted with msg.sender, which is the signer, not the staker
-    let lastSubmittedEpoch = (await this.getLastSubmittedEpochAsPerSubgraph(await this.signer.getAddress()))
+    let lastSubmittedEpoch: number
+    try {
+      lastSubmittedEpoch = (await this.getLastSubmittedEpochAsPerSubgraph(await this.signer.getAddress()))
+    } catch (ex) {
+      // without a local value there is nothing to check against the contract
+      if(!lastSubmittedEpochLocal) throw ex
+      console.warn(`${(new Date()).toJSON()} Could not fetch last submitted epoch from subgraph, checking epoch ${lastSubmittedEpochLocal} with the contract`);
+      console.warn(ex)
+      lastSubmittedEpoch = 0
+    }
 
     if(lastSubmittedEpochLocal) {
       if(lastSubmittedEpochLocal < lastSubmittedEpoch) {
@@ -203,10 +212,13 @@ export class Ticketing {
         console.warn(`${(new Date()).toJSON()} Manual transaction submission detected, initiating cleanup`);
         return await this.submitMissingEpochs(lastSubmittedEpochLocal, lastSubmittedEpoch, networkId);
       } else if(lastSubmittedEpochLocal > lastSubmittedEpoch) {
-        // transactions are submitted but not updated on subgraph yet, so wait
-        // this case shouldn't come at all
-        console.log(`${(new Date()).toJSON()} Transaction pending for the signer account, wait for it to complete`);
-        return TRANSACTION_WAIT_TIME;
+        // subgraph has not indexed the last transaction yet, is not reachable, or has no tickets
+        // for this signer (signer was changed), so check with the contract which is keyed by receiver
+        if(!(await this.contractCache.checkIfTicketIsIssued(lastSubmittedEpochLocal.toString()))) {
+          console.log(`${(new Date()).toJSON()} Tickets for epoch ${lastSubmittedEpochLocal} not issued as per contract, wait for the transaction to complete`);
+          return TRANSACTION_WAIT_TIME;
+        }
+        console.log(`${(new Date()).toJSON()} Subgraph is behind at epoch ${lastSubmittedEpoch}, tickets for epoch ${lastSubmittedEpochLocal} are issued as per contract`);
       }
       lastSubmittedEpoch = lastSubmittedEpochLocal
     }
