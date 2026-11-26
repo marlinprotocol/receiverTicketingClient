@@ -1,10 +1,8 @@
 import { utils } from 'ethers'
-import { Pool, type PoolClient, type PoolConfig } from 'pg'
+import { Pool, type PoolConfig } from 'pg'
 import { type Operation, type ClusterQueryData, type Epoch, type EpochData } from './types'
 
 export class DB {
-  private ticketClient: PoolClient
-  private receiverClient: PoolClient
   private receiver: string
   private readonly ticketPool: Pool
   private readonly receiverPool: Pool
@@ -14,23 +12,28 @@ export class DB {
     this.ticketPool = new Pool(ticketConfig)
     this.receiverPool = new Pool(receiverConfig)
     this.epochData = epochData
+
+    // idle connections emit error when db restarts or network drops, pool removes them
+    // and creates new connections for later queries, without a handler the process crashes
+    this.ticketPool.on('error', (err) => {
+      console.error(`${(new Date()).toJSON()} Ticket db connection error: ${err.message}`)
+    })
+    this.receiverPool.on('error', (err) => {
+      console.error(`${(new Date()).toJSON()} Receiver db connection error: ${err.message}`)
+    })
   }
 
   public async init (receiverAddress: string): Promise<void> {
-    if (!this.ticketClient) {
-      this.ticketClient = await this.ticketPool.connect()
-    }
-
-    if (!this.receiverClient) {
-      this.receiverClient = await this.receiverPool.connect()
-    }
+    // check that both dbs are reachable, connections are taken from the pool for every query
+    await this.ticketPool.query('SELECT 1')
+    await this.receiverPool.query('SELECT 1')
 
     this.receiver = receiverAddress;
   }
 
   public async fetchTicketsForEpoch (networkId: string, epoch: string, epochBoundaries: [number, number], selectedClusters: string[]): Promise<Epoch> {
     const query = getReceiptQueryString(...epochBoundaries, selectedClusters);
-    const result = await this.ticketClient.query(query)
+    const result = await this.ticketPool.query(query)
 
     if (result.rowCount !== result.rows.length) {
       throw new Error('Fetched partial ticket data, need complete ticket data')
@@ -55,7 +58,7 @@ export class DB {
     for (let index = 0; index < epochBoundaries.length; index++) {
       const epoch = _epochs[index]
       const query = getReceiptQueryString(...epochBoundaries[index], selectedClusters[index])
-      const result = await this.ticketClient.query(query)
+      const result = await this.ticketPool.query(query)
       const clusterData = result.rows as ClusterQueryData[]
 
       epochs.push({
@@ -70,7 +73,7 @@ export class DB {
   }
 
   public async getTimeOfFirstTicketAfter(ts: number): Promise<number> {
-    const result = await this.ticketClient.query(findTimeOfFirstTicketsAfterQuery(ts));
+    const result = await this.ticketPool.query(findTimeOfFirstTicketsAfterQuery(ts));
     const firstTime = result.rows[0];
     if(!firstTime || !firstTime.min) return 0;
     return Date.parse(result.rows[0].min)/1000
@@ -78,15 +81,15 @@ export class DB {
 
   public async savePendingTransaction (operation: number, epoch: number, rawTx: string): Promise<void> {
     const tx = utils.parseTransaction(rawTx)
-    await this.receiverClient.query(getInsertString(operation, epoch, tx.hash, rawTx, this.receiver))
+    await this.receiverPool.query(getInsertString(operation, epoch, tx.hash, rawTx, this.receiver))
   }
 
   public async deleteOperation (operation: number): Promise<void> {
-    await this.receiverClient.query(deleteOperation(operation, this.receiver))
+    await this.receiverPool.query(deleteOperation(operation, this.receiver))
   }
 
   public async deleteEpoch (epoch: number): Promise<void> {
-    await this.receiverClient.query(deleteEpoch(epoch, this.receiver))
+    await this.receiverPool.query(deleteEpoch(epoch, this.receiver))
   }
 
   public async getPendingTransaction (): Promise<string | null> {
@@ -101,18 +104,18 @@ export class DB {
 
   public async createRequiredTables (): Promise<void> {
     const combinedTable = createCombinedTable(this.receiver)
-    await this.receiverClient.query(combinedTable)
+    await this.receiverPool.query(combinedTable)
   }
 
   public async getLastOperationData (): Promise<Operation[]> {
     const lastOperationNumber = await this.getLastOperationNumber()
-    const result = await this.receiverClient.query(getLastOperationData(lastOperationNumber, this.receiver))
+    const result = await this.receiverPool.query(getLastOperationData(lastOperationNumber, this.receiver))
 
     return result.rows as Operation[]
   }
 
   public async getLastOperationNumber (): Promise<number> {
-    const result = await this.receiverClient.query(getLastOperationNumberScript(this.receiver))
+    const result = await this.receiverPool.query(getLastOperationNumberScript(this.receiver))
     if (result.rows.length === 0) {
       return 0
     } else {
@@ -121,11 +124,11 @@ export class DB {
   }
 
   public async updateLatestEpoch (lastSubmittedEpoch: number): Promise<void> {
-    await this.receiverClient.query(updateLastSubmitted(lastSubmittedEpoch, this.receiver))
+    await this.receiverPool.query(updateLastSubmitted(lastSubmittedEpoch, this.receiver))
   }
 
   public async getLastProcessedEpoch (): Promise<number> {
-    const lastSubmittedRow = await this.receiverClient.query(getLastSubmittedQuery(this.receiver))
+    const lastSubmittedRow = await this.receiverPool.query(getLastSubmittedQuery(this.receiver))
     if(lastSubmittedRow.rows.length == 0) return 0;
     return lastSubmittedRow.rows[0].lastepoch;
   }
@@ -164,9 +167,7 @@ const createCombinedTable = (receiver: string): string => {
       hash character varying(66) NOT NULL,
       data character varying NOT NULL
   );
-  
-  ALTER TABLE IF EXISTS public.operations_${receiver}
-      OWNER to postgres;
+
   
   CREATE TABLE IF NOT EXISTS public.lastSubmitted_${receiver}
   (
@@ -174,9 +175,7 @@ const createCombinedTable = (receiver: string): string => {
       lastEpoch integer NOT NULL,
       PRIMARY KEY (index)
   );
-  
-  ALTER TABLE IF EXISTS public.lastSubmitted_${receiver}
-      OWNER to postgres;`
+`
 }
 
 const getLastOperationData = (operation: number, receiver: string): string => {
